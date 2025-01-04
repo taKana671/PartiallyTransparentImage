@@ -9,7 +9,7 @@ import numpy as np
 from PIL import Image, ImageTk
 
 
-class CannotReadImageFile(Exception):
+class ImageFileError(Exception):
     pass
 
 
@@ -20,9 +20,6 @@ class Size(NamedTuple):
     color: int = None
     mode: int = None
 
-    def __len__(self):
-        return len([v for v in self if v is not None])
-
     def scale(self, scale):
         return int(self.rows * scale), int(self.cols * scale)
 
@@ -30,7 +27,7 @@ class Size(NamedTuple):
         if pt.x <= self.cols and pt.y <= self.rows:
             return True
 
-    def replace_outside_pt(self, pt):
+    def keep_range(self, pt):
         x = self.cols if pt.x > self.cols else pt.x
         y = self.rows if pt.y > self.rows else pt.y
         return x, y
@@ -74,9 +71,9 @@ class Window(ttk.Frame):
         self.canvas = tk.Canvas(frame, bg='#D3D3D3')
         self.canvas.pack(fill=tk.BOTH, expand=True)
 
-        self.canvas.bind('<Button-1>', self.click)
+        self.canvas.bind('<Button-1>', self.mouse_click)
         self.canvas.bind('<Button1-Motion>', self.mouse_drag)
-        self.canvas.bind('<ButtonRelease-1>', self.release)
+        self.canvas.bind('<ButtonRelease-1>', self.mouse_release)
 
     def create_widget_area(self):
         frame = ttk.Frame(self, relief=tk.SUNKEN, padding=(10, 20))
@@ -124,10 +121,11 @@ class Window(ttk.Frame):
         self.bind_all("<Control-o>", self.open)
         self.bind_all("<Control-s>", self.save)
 
-    def click(self, event):
+    def mouse_click(self, event):
         if self.img_tk:
             scale = float(self.var_scale.get())
-            self.scaled_size = Size(*self.size.scale(1 + scale / 100))
+            r, c = self.size.scale(1 + scale / 100)
+            self.scaled_size = self.size._replace(rows=r, cols=c)
 
             if self.scaled_size.is_inside(event):
                 self.start_pt = Point(event.x, event.y)
@@ -144,16 +142,16 @@ class Window(ttk.Frame):
 
     def mouse_drag(self, event):
         if self.start_pt:
-            x, y = self.scaled_size.replace_outside_pt(event)
+            x, y = self.scaled_size.keep_range(event)
             self.canvas.coords(self.rect_tag, self.start_pt.x, self.start_pt.y, x, y)
 
-    def release(self, event):
+    def mouse_release(self, event):
         if self.start_pt:
             self.canvas.delete(self.rect_tag)
             scale = self.scaled_size.rows / self.size.rows
             pt0 = self.start_pt.get_original_pt(scale)
 
-            x, y = self.scaled_size.replace_outside_pt(event)
+            x, y = self.scaled_size.keep_range(event)
             end_pt = Point(x, y)
             pt1 = end_pt.get_original_pt(scale)
 
@@ -171,9 +169,7 @@ class Window(ttk.Frame):
         file_type = [('image', '*.png;*.jpg')]
         init_dir = pathlib.Path(__file__).parent
 
-        if file_path := filedialog.askopenfilename(
-                filetypes=file_type, initialdir=init_dir):
-            print(file_path)
+        if file_path := filedialog.askopenfilename(filetypes=file_type, initialdir=init_dir):
             self.show_image(file_path)
 
     def save(self, event=None):
@@ -181,18 +177,17 @@ class Window(ttk.Frame):
             file_type = [('image', '*.png')]
             init_dir = pathlib.Path(__file__).parent
 
-            if file_path := filedialog.asksaveasfilename(
-                    filetypes=file_type, initialdir=init_dir):
-                print(file_path)
+            if file_path := filedialog.asksaveasfilename(filetypes=file_type, initialdir=init_dir):
                 self.save_image(file_path)
 
     def read(self, file_path):
-        try:
-            mode = cv2.IMREAD_UNCHANGED
-            if (img := cv2.imread(file_path, mode)) is None:
-                raise CannotReadImageFile()
+        mode = cv2.IMREAD_UNCHANGED
 
-        except CannotReadImageFile:
+        try:
+            if (img := cv2.imread(file_path, mode)) is None:
+                raise ImageFileError()
+
+        except ImageFileError:
             messagebox.showwarning(
                 "Alert", "Can't open/read file: check file path/integrity.")
             return None, None
@@ -218,7 +213,7 @@ class Window(ttk.Frame):
     def validate_alpha(self):
         try:
             alpha = int(self.alpha_var.get())
-            return min(alpha, 255)
+            return min(max(alpha, 0), 255)
         except ValueError:
             messagebox.showwarning(
                 "Alert", "Enter a positive integer to alpha field.")
@@ -263,7 +258,12 @@ class Window(ttk.Frame):
         if self.size.color == 4:
             self.img_org[y0: y1 + 1, x0: x1 + 1, 3] = 255
 
-        self.img_cvt[y0: y1 + 1, x0: x1 + 1] = self.img_org[y0: y1 + 1, x0: x1 + 1]
+        if self.size.mode == cv2.IMREAD_UNCHANGED:
+            self.img_cvt[y0: y1 + 1, x0: x1 + 1] = self.img_org[y0: y1 + 1, x0: x1 + 1]
+        else:
+            # When once save file, the shape of self.img_org becomes (n, n, n, 4).
+            self.img_cvt[y0: y1 + 1, x0: x1 + 1] = self.img_org[y0: y1 + 1, x0: x1 + 1, :3]
+
         self.img_pil = Image.fromarray(self.img_cvt)
         self.resize_img(self.var_scale.get())
         self.canvas.configure(cursor='arrow')
