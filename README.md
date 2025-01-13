@@ -17,6 +17,7 @@ Useful when, for example, making a heightfield image partially transparent to ma
 # Usage
 * Execute a command below on your command line.
 ```
+>>>cd image_editor
 >>>python image_editor.py
 ```
 
