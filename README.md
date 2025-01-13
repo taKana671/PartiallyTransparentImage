@@ -15,6 +15,8 @@ Useful when, for example, making a heightfield image partially transparent to ma
 * Windows11
 
 # Usage
+
+### image_editor
 * Execute a command below on your command line.
 ```
 >>>cd image_editor
@@ -32,4 +34,16 @@ Useful when, for example, making a heightfield image partially transparent to ma
 output file
 
 ![result](https://github.com/user-attachments/assets/feb1163d-4c17-4f0b-8a3a-b98edaad8d38)
+
+
+### invisible_triangle
+* Execute a command below on your command line.
+* Create a hole by making the triangles in the block of geomipterrain at the clicked position invisible.
+```
+>>>cd invisible_triangle
+>>>python create_terrain.py
+```
+
+![demo3](https://github.com/user-attachments/assets/951f3805-bf59-498d-9ebe-82a579038955)
+
 
